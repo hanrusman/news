@@ -42,6 +42,7 @@ class Article(models.Model):
     # Status
     is_read = models.BooleanField(default=False)
     is_saved = models.BooleanField(default=False)
+    feedback_score = models.IntegerField(default=0) # -1: Dislike, 0: Neutral, 1: Like
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

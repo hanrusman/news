@@ -1,0 +1,25 @@
+<div class="flex items-center gap-1" id="feedback-{{ article.id }}">
+    <!-- Dislike Button -->
+    <button hx-post="{% url 'news:handle_feedback' article.id 'dislike' %}" hx-target="#feedback-{{ article.id }}"
+        hx-swap="outerHTML"
+        class="p-1.5 rounded-full transition-colors {% if article.feedback_score == -1 %}text-red-500 bg-red-500/10{% else %}text-[#696d75] hover:text-red-500 hover:bg-red-500/10{% endif %}"
+        title="Show less like this">
+        <svg class="h-4 w-4" fill="{% if article.feedback_score == -1 %}currentColor{% else %}none{% endif %}"
+            viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M10 14H5.236a2 2 0 01-1.789-2.894l3.5-7A2 2 0 018.736 3h4.018a2 2 0 01.485.06l3.76.94m-7 10v5a2 2 0 002 2h.096c.5 0 .905-.405.905-.904 0-.715.211-1.413.608-2.008L17 13V4m-7 10h2m5-10h2a2 2 0 012 2v6a2 2 0 01-2 2h-2.5" />
+        </svg>
+    </button>
+
+    <!-- Like Button -->
+    <button hx-post="{% url 'news:handle_feedback' article.id 'like' %}" hx-target="#feedback-{{ article.id }}"
+        hx-swap="outerHTML"
+        class="p-1.5 rounded-full transition-colors {% if article.feedback_score == 1 %}text-green-500 bg-green-500/10{% else %}text-[#696d75] hover:text-green-500 hover:bg-green-500/10{% endif %}"
+        title="Show more like this">
+        <svg class="h-4 w-4" fill="{% if article.feedback_score == 1 %}currentColor{% else %}none{% endif %}"
+            viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M14 10h4.764a2 2 0 011.789 2.894l-3.5 7A2 2 0 0115.263 21h-4.018a2 2 0 01-.485-.06l-3.76-.94m7-10v-5a2 2 0 00-2-2h-.096c-.5 0-.905.405-.905.904 0 .715-.211 1.412-.608 2.008L7 11v9m7-10h-2M7 20H5a2 2 0 01-2-2v-6a2 2 0 012-2h2.5" />
+        </svg>
+    </button>
+</div>

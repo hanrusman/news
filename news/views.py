@@ -1,9 +1,11 @@
+from django.contrib.auth.decorators import login_required
 from django.shortcuts import render, get_object_or_404, redirect
 from urllib.parse import quote
 from django.views.decorators.http import require_POST
 from django.core.paginator import Paginator
 from .models import Article, Category, Source
 
+@login_required
 def dashboard(request):
     """
     Main view: shows unread articles and sidebar categories.
@@ -29,6 +31,7 @@ def dashboard(request):
         
     return render(request, 'news/dashboard.html', context)
 
+@login_required
 def category_detail(request, slug):
     categories = Category.objects.all()
     category = get_object_or_404(Category, slug=slug)
@@ -50,6 +53,7 @@ def category_detail(request, slug):
 
     return render(request, 'news/dashboard.html', context)
 
+@login_required
 def saved_articles(request):
     """
     Shows all bookmarked articles.
@@ -72,6 +76,7 @@ def saved_articles(request):
 
     return render(request, 'news/dashboard.html', context)
 
+@login_required
 @require_POST
 def mark_read(request, article_id):
     """
@@ -83,8 +88,8 @@ def mark_read(request, article_id):
     # Return empty response or checkmark
     return render(request, 'components/mark_read_success.html')
 
-    return render(request, 'components/mark_read_success.html')
-
+@login_required
+@require_POST
 def toggle_bookmark(request, article_id):
     """
     Toggles the internal bookmark state.
@@ -105,6 +110,8 @@ def toggle_bookmark(request, article_id):
         # Return the original grey button state (hardcoded for speed here, or use a template partial)
         return render(request, 'components/bookmark_inactive.html', context)
 
+@login_required
+@require_POST
 def export_obsidian(request, article_id):
     """
     Returns Obsidian URI to create a note.
@@ -121,6 +128,7 @@ def export_obsidian(request, article_id):
     }
     return render(request, 'components/obsidian_success.html', context)
 
+@login_required
 @require_POST
 def refresh_feeds(request):
     """
@@ -134,3 +142,27 @@ def refresh_feeds(request):
         # In a real app we'd log this
         print(f"Error fetching feeds: {e}")
         return render(request, 'components/refresh_error.html', status=500)
+
+@login_required
+@require_POST
+def handle_feedback(request, article_id, action):
+    """
+    Handle like/dislike feedback. Action key: 'like' (1) or 'dislike' (-1).
+    Toggles the score if already selected.
+    """
+    article = get_object_or_404(Article, pk=article_id)
+    
+    score_map = {'like': 1, 'dislike': -1}
+    new_score = score_map.get(action, 0)
+    
+    # Toggle logic: if clicking "like" and it's already liked, reset to 0
+    if article.feedback_score == new_score:
+        article.feedback_score = 0
+    else:
+        article.feedback_score = new_score
+        
+    article.save()
+    
+    # Return the updated buttons
+    context = {'article': article}
+    return render(request, 'components/feedback_buttons.html', context)
