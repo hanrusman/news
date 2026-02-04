@@ -15,12 +15,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy project
 COPY . /app/
 
-# Collect static files
-RUN python manage.py collectstatic --noinput
-
 # Expose port
 EXPOSE 8000
 
 # Command to run (using dev server for simplicity in personal setup, or use gunicorn)
 # Using runserver 0.0.0.0:8000 allows us to see logs easily and reload if mounted
-CMD ["python", "manage.py", "runserver", "0.0.0.0:8000"]
+CMD python manage.py collectstatic --noinput && gunicorn --bind 0.0.0.0:8000 news_aggregator.wsgi:application
