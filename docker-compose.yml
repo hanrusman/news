@@ -1,0 +1,13 @@
+services:
+  newsdeck:
+    build: .
+    container_name: newsdeck
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./db.sqlite3:/app/db.sqlite3
+      # Mount source code for development if desired, or remove for production image
+      # - .:/app 
+    env_file:
+      - .env
+    restart: unless-stopped
