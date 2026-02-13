@@ -3,7 +3,8 @@ from django.shortcuts import render, get_object_or_404, redirect
 from urllib.parse import quote
 from django.views.decorators.http import require_POST
 from django.core.paginator import Paginator
-from .models import Article, Category, Source
+from django.db.models import F, Q
+from .models import Article, Category, Source, ReadingContext, UserPreference
 
 @login_required
 def dashboard(request):
@@ -11,24 +12,37 @@ def dashboard(request):
     Main view: shows unread articles and sidebar categories.
     """
     categories = Category.objects.all()
-    # Get unread articles, sorted by date
+
+    # Get active reading context
+    active_context = ReadingContext.objects.filter(user=request.user, is_active=True).first()
+    all_contexts = ReadingContext.objects.filter(user=request.user)
+
+    # Get unread articles, sorted by personalization score (descending)
     all_articles = Article.objects.filter(is_read=False).select_related('source', 'source__category')
-    
+
+    # Sort by personalization_score if available, otherwise by pub_date
+    all_articles = all_articles.order_by(
+        F('personalization_score').desc(nulls_last=True),
+        '-pub_date'
+    )
+
     # Pagination (20 per page)
     paginator = Paginator(all_articles, 20)
     page_number = request.GET.get('page', 1)
     page_obj = paginator.get_page(page_number)
-    
+
     context = {
         'categories': categories,
-        'articles': page_obj, # This is now the page object
-        'page_title': 'Dashboard'
+        'articles': page_obj,
+        'page_title': 'Dashboard',
+        'active_context': active_context,
+        'all_contexts': all_contexts,
     }
-    
+
     if request.headers.get('HX-Request'):
         # If HTMX request (scrolling), return just the rows
         return render(request, 'news/partials/article_list.html', context)
-        
+
     return render(request, 'news/dashboard.html', context)
 
 @login_required
@@ -36,7 +50,17 @@ def category_detail(request, slug):
     categories = Category.objects.all()
     category = get_object_or_404(Category, slug=slug)
     all_articles = Article.objects.filter(source__category=category, is_read=False).select_related('source')
-    
+
+    # Get active reading context
+    active_context = ReadingContext.objects.filter(user=request.user, is_active=True).first()
+    all_contexts = ReadingContext.objects.filter(user=request.user)
+
+    # Sort by personalization score
+    all_articles = all_articles.order_by(
+        F('personalization_score').desc(nulls_last=True),
+        '-pub_date'
+    )
+
     paginator = Paginator(all_articles, 20)
     page_number = request.GET.get('page', 1)
     page_obj = paginator.get_page(page_number)
@@ -45,9 +69,11 @@ def category_detail(request, slug):
         'categories': categories,
         'current_category': category,
         'articles': page_obj,
-        'page_title': category.name
+        'page_title': category.name,
+        'active_context': active_context,
+        'all_contexts': all_contexts,
     }
-    
+
     if request.headers.get('HX-Request'):
         return render(request, 'news/partials/article_list.html', context)
 
@@ -60,17 +86,29 @@ def saved_articles(request):
     """
     categories = Category.objects.all()
     all_articles = Article.objects.filter(is_saved=True).select_related('source', 'source__category')
-    
+
+    # Get active reading context
+    active_context = ReadingContext.objects.filter(user=request.user, is_active=True).first()
+    all_contexts = ReadingContext.objects.filter(user=request.user)
+
+    # Sort by personalization score
+    all_articles = all_articles.order_by(
+        F('personalization_score').desc(nulls_last=True),
+        '-pub_date'
+    )
+
     paginator = Paginator(all_articles, 20)
     page_number = request.GET.get('page', 1)
     page_obj = paginator.get_page(page_number)
-    
+
     context = {
         'categories': categories,
         'articles': page_obj,
-        'page_title': 'Saved Articles'
+        'page_title': 'Saved Articles',
+        'active_context': active_context,
+        'all_contexts': all_contexts,
     }
-    
+
     if request.headers.get('HX-Request'):
         return render(request, 'news/partials/article_list.html', context)
 
@@ -145,24 +183,55 @@ def refresh_feeds(request):
 
 @login_required
 @require_POST
+def switch_context(request, context_id):
+    """
+    Switch to a different reading context.
+    """
+    # Deactivate all contexts
+    ReadingContext.objects.filter(user=request.user, is_active=True).update(is_active=False)
+
+    # Activate selected context
+    context = get_object_or_404(ReadingContext, pk=context_id, user=request.user)
+    context.is_active = True
+    context.save()
+
+    # Redirect to dashboard
+    return redirect('news:dashboard')
+
+
+@login_required
+@require_POST
 def handle_feedback(request, article_id, action):
     """
     Handle like/dislike feedback. Action key: 'like' (1) or 'dislike' (-1).
     Toggles the score if already selected.
     """
+    from news.models import UserPreference
+
     article = get_object_or_404(Article, pk=article_id)
-    
+
     score_map = {'like': 1, 'dislike': -1}
     new_score = score_map.get(action, 0)
-    
+
     # Toggle logic: if clicking "like" and it's already liked, reset to 0
     if article.feedback_score == new_score:
         article.feedback_score = 0
     else:
         article.feedback_score = new_score
-        
+
     article.save()
-    
+
+    # Update user preferences periodically (every 10 feedbacks)
+    try:
+        prefs, _ = UserPreference.objects.get_or_create(user=request.user)
+        feedback_count = Article.objects.filter(feedback_score__in=[-1, 1]).count()
+
+        # Update preferences every 10 feedbacks
+        if feedback_count % 10 == 0:
+            prefs.update_from_feedback()
+    except Exception as e:
+        print(f"Error updating preferences: {e}")
+
     # Return the updated buttons
     context = {'article': article}
     return render(request, 'components/feedback_buttons.html', context)

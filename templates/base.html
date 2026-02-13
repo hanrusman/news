@@ -111,6 +111,31 @@
                 Saved Articles
             </a>
 
+            <!-- Reading Contexts / Mood Switcher -->
+            {% if all_contexts %}
+            <div class="mt-6 mb-1 px-3">
+                <h3 class="text-xs font-semibold text-[#696d75] uppercase tracking-wider">Reading Mode</h3>
+            </div>
+
+            {% for ctx in all_contexts %}
+            <form method="post" action="{% url 'news:switch_context' ctx.id %}">
+                {% csrf_token %}
+                <button type="submit"
+                    class="w-full group flex items-center px-3 py-1.5 text-[15px] font-medium rounded-md {% if active_context.id == ctx.id %}bg-indigo-500/20 text-indigo-400 border border-indigo-500/30{% else %}text-[#9a9b9e] hover:bg-[#222529] hover:text-[#d1d2d3]{% endif %} transition-colors text-left">
+                    <span class="mr-3 text-base leading-none opacity-60">
+                        {% if ctx.name == 'Morning Briefing' %}☀️
+                        {% elif ctx.name == 'Deep Dive' %}🔍
+                        {% elif ctx.name == 'Balanced' %}⚖️
+                        {% elif ctx.name == 'Discovery Mode' %}🎲
+                        {% elif ctx.name == 'Trending Topics' %}🔥
+                        {% else %}📖{% endif %}
+                    </span>
+                    <span class="truncate">{{ ctx.name }}</span>
+                </button>
+            </form>
+            {% endfor %}
+            {% endif %}
+
             <!-- Channels / Categories -->
             <div class="mt-6 mb-1 px-3 flex items-center justify-between group">
                 <h3
