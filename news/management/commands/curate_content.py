@@ -36,8 +36,8 @@ class Command(BaseCommand):
                 self.stdout.write("Updating user preferences from feedback history...")
                 user_prefs.update_from_feedback()
                 self.stdout.write(self.style.SUCCESS(
-                    f"Updated preferences: {len(user_prefs.get_interest_keywords())} keywords, "
-                    f"{len(user_prefs.get_category_weights())} category weights"
+                    f"Updated preferences: {len(user_prefs.interest_keywords)} keywords, "
+                    f"{len(user_prefs.preferred_categories)} category weights"
                 ))
 
         except Exception as e:
@@ -47,7 +47,8 @@ class Command(BaseCommand):
         # Get active reading context
         try:
             reading_context = ReadingContext.objects.filter(user=user, is_active=True).first()
-        except:
+        except Exception as e:
+            self.stdout.write(self.style.WARNING(f"Could not load reading context: {e}"))
             reading_context = None
 
         # 1. Summarize Long Articles without summary
@@ -136,5 +137,5 @@ class Command(BaseCommand):
         if user_prefs:
             self.stdout.write(f"User: {user.username}")
             self.stdout.write(f"Total feedback: {user_prefs.total_feedback_count}")
-            self.stdout.write(f"Top interests: {', '.join(user_prefs.get_interest_keywords()[:5])}")
+            self.stdout.write(f"Top interests: {', '.join(user_prefs.interest_keywords[:5])}")
             self.stdout.write("\nRun with --update-preferences to refresh user learning.")

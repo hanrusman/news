@@ -5,14 +5,18 @@ Uses yt-dlp for YouTube (free, no API key needed) and RSS parsing for podcasts.
 import subprocess
 import json
 import re
+import logging
 from urllib.parse import urlparse, parse_qs
+
+logger = logging.getLogger(__name__)
 
 
 def is_youtube_url(url):
     """Check if URL is a YouTube video."""
     youtube_domains = ['youtube.com', 'youtu.be', 'm.youtube.com']
     parsed = urlparse(url)
-    return any(domain in parsed.netloc for domain in youtube_domains)
+    domain = parsed.netloc.lower()
+    return any(domain == d or domain.endswith('.' + d) for d in youtube_domains)
 
 
 def extract_youtube_metadata(url):
@@ -23,6 +27,12 @@ def extract_youtube_metadata(url):
     Note: Requires yt-dlp to be installed: pip install yt-dlp
     """
     if not is_youtube_url(url):
+        return None
+
+    # Validate URL scheme for security (prevent command injection)
+    parsed = urlparse(url)
+    if parsed.scheme not in ('http', 'https'):
+        logger.warning(f"Invalid URL scheme for YouTube metadata: {parsed.scheme}")
         return None
 
     try:
@@ -46,7 +56,7 @@ def extract_youtube_metadata(url):
                 'title': data.get('title'),  # In case FreshRSS title is truncated
             }
     except (subprocess.TimeoutExpired, subprocess.CalledProcessError, json.JSONDecodeError, FileNotFoundError) as e:
-        print(f"Error extracting YouTube metadata: {e}")
+        logger.error(f"Error extracting YouTube metadata: {e}")
 
     return None
 

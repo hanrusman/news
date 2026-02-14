@@ -1,8 +1,11 @@
 import os
+import logging
 import google.generativeai as genai
 from django.conf import settings
 import json
 from collections import Counter
+
+logger = logging.getLogger(__name__)
 
 # Configure Gemini
 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
@@ -21,7 +24,7 @@ def summarize_article(text):
         response = model.generate_content(prompt)
         return response.text
     except Exception as e:
-        print(f"Error summarizing: {e}")
+        logger.error(f"Error summarizing article: {e}")
         return None
 
 def score_relevance_batch(articles_data, user_preferences=None):
@@ -37,7 +40,7 @@ def score_relevance_batch(articles_data, user_preferences=None):
     # Build interest profile from user preferences
     interest_profile = "a tech-savvy user interested in AI, World News, and Tech"
     if user_preferences:
-        keywords = user_preferences.get_interest_keywords()
+        keywords = user_preferences.interest_keywords
         if keywords:
             interest_profile = f"a user interested in: {', '.join(keywords[:10])}"
 
@@ -65,7 +68,7 @@ def score_relevance_batch(articles_data, user_preferences=None):
         response = model.generate_content(prompt, generation_config={"response_mime_type": "application/json"})
         return json.loads(response.text)
     except Exception as e:
-        print(f"Error scoring: {e}")
+        logger.error(f"Error scoring articles: {e}")
         return {}
 
 
@@ -80,20 +83,20 @@ def calculate_personalization_score(article, user_preferences):
     score = 50.0  # Start neutral
 
     # Category preference boost/penalty
-    category_weights = user_preferences.get_category_weights()
+    category_weights = user_preferences.preferred_categories
     category_slug = article.source.category.slug if article.source and article.source.category else None
     if category_slug and category_slug in category_weights:
         # Weight is between -1 and 1, scale to -20 to +20
         score += category_weights[category_slug] * 20
 
     # Source preference boost/penalty
-    source_weights = user_preferences.get_source_weights()
+    source_weights = user_preferences.preferred_sources
     source_id = str(article.source.id) if article.source else None
     if source_id and source_id in source_weights:
         score += source_weights[source_id] * 15
 
     # Keyword matching boost
-    keywords = user_preferences.get_interest_keywords()
+    keywords = user_preferences.interest_keywords
     if keywords:
         title_lower = article.title.lower()
         desc_lower = (article.description or '').lower()
@@ -157,7 +160,7 @@ def calculate_serendipity_score(article, user_preferences):
     score = 50.0
 
     # Articles from unfamiliar categories get higher serendipity
-    category_weights = user_preferences.get_category_weights()
+    category_weights = user_preferences.preferred_categories
     category_slug = article.source.category.slug if article.source and article.source.category else None
 
     if category_slug:
@@ -169,7 +172,7 @@ def calculate_serendipity_score(article, user_preferences):
             score -= 20  # Familiar territory
 
     # Articles with no keyword matches are more serendipitous
-    keywords = user_preferences.get_interest_keywords()
+    keywords = user_preferences.interest_keywords
     if keywords:
         title_lower = article.title.lower()
         matches = sum(1 for kw in keywords if kw.lower() in title_lower)
@@ -211,7 +214,8 @@ def classify_content_depth(article):
 
         if classification in ['light', 'medium', 'heavy']:
             return classification
-    except:
+    except Exception as e:
+        logger.error(f"Content depth classification failed: {e}")
         pass
 
     return 'medium'  # Default

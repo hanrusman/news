@@ -77,9 +77,9 @@ class UserPreference(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='preferences')
 
     # Learned interests (stored as JSON)
-    interest_keywords = models.TextField(default='[]', help_text="JSON list of interest keywords")
-    preferred_categories = models.TextField(default='{}', help_text="JSON dict of category_slug -> weight")
-    preferred_sources = models.TextField(default='{}', help_text="JSON dict of source_id -> weight")
+    interest_keywords = models.JSONField(default=list, help_text="List of interest keywords")
+    preferred_categories = models.JSONField(default=dict, help_text="Dict of category_slug -> weight")
+    preferred_sources = models.JSONField(default=dict, help_text="Dict of source_id -> weight")
 
     # Content preferences
     preferred_content_depth = models.CharField(max_length=20, choices=[
@@ -95,30 +95,6 @@ class UserPreference(models.Model):
     total_feedback_count = models.IntegerField(default=0)
     last_updated = models.DateTimeField(auto_now=True)
 
-    def get_interest_keywords(self):
-        """Returns list of interest keywords"""
-        try:
-            return json.loads(self.interest_keywords)
-        except:
-            return []
-
-    def set_interest_keywords(self, keywords):
-        """Sets interest keywords from list"""
-        self.interest_keywords = json.dumps(keywords)
-
-    def get_category_weights(self):
-        """Returns dict of category preferences"""
-        try:
-            return json.loads(self.preferred_categories)
-        except:
-            return {}
-
-    def get_source_weights(self):
-        """Returns dict of source preferences"""
-        try:
-            return json.loads(self.preferred_sources)
-        except:
-            return {}
 
     def update_from_feedback(self):
         """
@@ -142,7 +118,7 @@ class UserPreference(models.Model):
                 weight = (liked_count - disliked_count) / total
                 category_weights[cat.slug] = round(weight, 2)
 
-        self.preferred_categories = json.dumps(category_weights)
+        self.preferred_categories = category_weights
 
         # Update source preferences
         source_weights = {}
@@ -154,7 +130,7 @@ class UserPreference(models.Model):
                 weight = (liked_count - disliked_count) / total
                 source_weights[str(source.id)] = round(weight, 2)
 
-        self.preferred_sources = json.dumps(source_weights)
+        self.preferred_sources = source_weights
 
         # Extract keywords from liked articles (simple version)
         # In production, you'd use NLP/TF-IDF
@@ -166,7 +142,7 @@ class UserPreference(models.Model):
 
         # Top 20 keywords
         top_keywords = [word for word, count in words.most_common(20)]
-        self.interest_keywords = json.dumps(top_keywords)
+        self.interest_keywords = top_keywords
 
         self.total_feedback_count = liked_articles.count() + disliked_articles.count()
         self.save()
@@ -192,13 +168,38 @@ class ReadingContext(models.Model):
         ('heavy', 'Deep Content Only')
     ], default='medium')
 
-    # Scoring weights for this context
-    relevance_weight = models.FloatField(default=0.6, help_text="Weight for AI relevance score")
+    # Scoring weights for this context (must sum to 1.0)
+    relevance_weight = models.FloatField(default=0.5, help_text="Weight for AI relevance score")
     personalization_weight = models.FloatField(default=0.3, help_text="Weight for personalization")
-    serendipity_weight = models.FloatField(default=0.1, help_text="Weight for serendipity")
-    trend_weight = models.FloatField(default=0.2, help_text="Weight for trending topics")
+    serendipity_weight = models.FloatField(default=0.05, help_text="Weight for serendipity")
+    trend_weight = models.FloatField(default=0.15, help_text="Weight for trending topics")
 
     is_active = models.BooleanField(default=False)
+
+    def clean(self):
+        """Validate that scoring weights sum to approximately 1.0"""
+        from django.core.exceptions import ValidationError
+
+        total_weight = (
+            self.relevance_weight +
+            self.personalization_weight +
+            self.serendipity_weight +
+            self.trend_weight
+        )
+
+        # Allow small floating point errors (within 0.01)
+        if abs(total_weight - 1.0) > 0.01:
+            raise ValidationError({
+                'relevance_weight': f'Scoring weights must sum to 1.0 (currently {total_weight:.2f})',
+                'personalization_weight': f'Scoring weights must sum to 1.0 (currently {total_weight:.2f})',
+                'serendipity_weight': f'Scoring weights must sum to 1.0 (currently {total_weight:.2f})',
+                'trend_weight': f'Scoring weights must sum to 1.0 (currently {total_weight:.2f})',
+            })
+
+    def save(self, *args, **kwargs):
+        """Override save to call clean() for validation"""
+        self.full_clean()
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return f"{self.user.username} - {self.name}"

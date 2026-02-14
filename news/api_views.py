@@ -1,14 +1,19 @@
 from rest_framework import status
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import api_view, permission_classes, throttle_classes
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.authentication import TokenAuthentication
 from django.conf import settings
 from .models import Article, Source
 from .serializers import ArticleIngestSerializer, ArticleSerializer, SourceSerializer
+from .throttles import IngestThrottle, CurationThrottle
+import logging
+
+logger = logging.getLogger(__name__)
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
+@throttle_classes([IngestThrottle])
 def ingest_article(request):
     """
     API endpoint to ingest a single article from FreshRSS.
@@ -54,6 +59,7 @@ def ingest_article(request):
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
+@throttle_classes([IngestThrottle])
 def ingest_articles_batch(request):
     """
     API endpoint to ingest multiple articles in batch from FreshRSS.
@@ -98,9 +104,12 @@ def ingest_articles_batch(request):
                 article = serializer.save()
                 created_articles.append(article.id)
             except Exception as e:
+                # Log the full error server-side
+                logger.error(f"Failed to save article '{article_data.get('title', 'Unknown')}': {e}", exc_info=True)
+                # Return generic error to client (don't leak exception details)
                 errors.append({
                     'article': article_data.get('title', 'Unknown'),
-                    'error': str(e)
+                    'error': 'Failed to save article'
                 })
         else:
             errors.append({
@@ -137,9 +146,12 @@ def api_stats(request):
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
+@throttle_classes([CurationThrottle])
 def trigger_ai_curation(request):
     """
     Trigger AI curation process manually.
+
+    Rate limited to 10 requests per hour due to expensive AI operations.
 
     POST /api/curate/
     """
@@ -153,9 +165,12 @@ def trigger_ai_curation(request):
             'message': 'AI curation triggered successfully'
         })
     except Exception as e:
+        # Log the full error server-side
+        logger.error(f"AI curation failed: {e}", exc_info=True)
+        # Return generic error to client (don't leak exception details)
         return Response({
             'status': 'error',
-            'message': str(e)
+            'message': 'AI curation failed. Please try again later.'
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 @api_view(['GET'])

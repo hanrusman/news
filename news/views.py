@@ -5,6 +5,9 @@ from django.views.decorators.http import require_POST
 from django.core.paginator import Paginator
 from django.db.models import F, Q
 from .models import Article, Category, Source, ReadingContext, UserPreference
+import logging
+
+logger = logging.getLogger(__name__)
 
 @login_required
 def dashboard(request):
@@ -177,8 +180,7 @@ def refresh_feeds(request):
         call_command('fetch_feeds')
         return render(request, 'components/refresh_success.html') # We'll create this or just return 200
     except Exception as e:
-        # In a real app we'd log this
-        print(f"Error fetching feeds: {e}")
+        logger.error(f"Error fetching feeds: {e}", exc_info=True)
         return render(request, 'components/refresh_error.html', status=500)
 
 @login_required
@@ -230,7 +232,7 @@ def handle_feedback(request, article_id, action):
         if feedback_count % 10 == 0:
             prefs.update_from_feedback()
     except Exception as e:
-        print(f"Error updating preferences: {e}")
+        logger.error(f"Error updating preferences: {e}", exc_info=True)
 
     # Return the updated buttons
     context = {'article': article}

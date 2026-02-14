@@ -1,5 +1,8 @@
 from rest_framework import serializers
 from .models import Article, Source, Category
+import logging
+
+logger = logging.getLogger(__name__)
 
 class CategorySerializer(serializers.ModelSerializer):
     class Meta:
@@ -134,7 +137,7 @@ class ArticleIngestSerializer(serializers.Serializer):
                 enrich_article_with_metadata(article)
             except Exception as e:
                 # Don't fail ingestion if enrichment fails
-                print(f"Warning: Could not enrich article {article.id}: {e}")
+                logger.warning(f"Could not enrich article {article.id}: {e}")
 
         return article
 
